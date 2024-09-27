@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f9f9f9; /* Light gray background */
+            color: #333; /* Dark text for readability */
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            border: 1px solid #ddd; /* Light gray border */
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333; /* Dark text */
+        }
+        .error-message {
+            font-size: 16px;
+            margin: 20px 0;
+        }
+        a {
+            color: #007bff; /* Bootstrap primary color */
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline; /* Underline on hover */
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Error</h1>
+    <div class="error-message">
+        <strong>Error:</strong> {{.Error}}<br>
+        <strong>Description:</strong> {{.Description}}
+    </div>
+    <a href="/">Go back to the OIDC Client Test</a>
+</div>
+
+</body>
+</html>

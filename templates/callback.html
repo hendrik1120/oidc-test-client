@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OIDC Tokens and Claims</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    .token-container {
+      margin-bottom: 20px;
+    }
+    pre {
+      background-color: #f4f4f4;
+      padding: 10px;
+      border-radius: 5px;
+      overflow-x: auto;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 20px;
+    }
+    table, th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+  </style>
+</head>
+<body>
+<h1>OIDC Tokens and Claims</h1>
+
+<div class="token-container">
+  <h2>Access Token</h2>
+  <pre>{{ .AccessToken }}</pre>
+</div>
+
+<div class="token-container">
+  <h2>ID Token</h2>
+  <pre>{{ .IDToken }}</pre>
+</div>
+
+<div class="token-container">
+  <h2>ID Token Claims</h2>
+  <table>
+    <thead>
+    <tr>
+      <th>Claim</th>
+      <th>Value</th>
+    </tr>
+    </thead>
+    <tbody>
+    {{ range $key, $value := .Claims }}
+    <tr>
+      <td>{{ $key }}</td>
+      <td>{{ $value }}</td>
+    </tr>
+    {{ end }}
+    </tbody>
+  </table>
+</div>
+</body>
+</html>
