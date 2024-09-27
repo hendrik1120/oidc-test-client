@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"net/http"
 
@@ -20,16 +19,11 @@ func generateRandomString(length int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func generateCodeChallenge(verifier string) string {
-	h := sha256.New()
-	h.Write([]byte(verifier))
-	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
-}
-
 var (
 	oidcConfig   *oidc.Config
 	oauth2Config oauth2.Config
 	verifier     *oidc.IDTokenVerifier
+	pkceVerifier string
 )
 
 func main() {
@@ -96,22 +90,13 @@ func startOIDCFlow(c *gin.Context) {
 
 	c.SetCookie("oidc_state", state, 3600, "/", "localhost", false, true)
 
-	var codeVerifier, codeChallenge string
+	opts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline}
 	if req.PKCE == "true" {
-		codeVerifier, err = generateRandomString(32)
-		if err != nil {
-			c.String(http.StatusInternalServerError, "Failed to generate PKCE code verifier")
-			return
-		}
-
-		codeChallenge = generateCodeChallenge(codeVerifier)
-		c.SetCookie("oidc_code_verifier", codeVerifier, 3600, "/", "localhost", false, true)
+		pkceVerifier = oauth2.GenerateVerifier()
+		opts = append(opts, oauth2.S256ChallengeOption(pkceVerifier))
 	}
 
-	authCodeURL := oauth2Config.AuthCodeURL(state, oauth2.AccessTypeOffline)
-	if req.PKCE == "true" {
-		authCodeURL += "&code_challenge=" + codeChallenge + "&code_challenge_method=S256"
-	}
+	authCodeURL := oauth2Config.AuthCodeURL(state, opts...)
 
 	c.Redirect(http.StatusFound, authCodeURL)
 }
@@ -155,14 +140,12 @@ func handleOIDCCallback(c *gin.Context) {
 	}
 
 	ctx := context.Background()
-	codeVerifier, _ := c.Cookie("oidc_code_verifier")
-
-	tokenOpts := []oauth2.AuthCodeOption{}
-	if codeVerifier != "" {
-		tokenOpts = append(tokenOpts, oauth2.SetAuthURLParam("code_verifier", codeVerifier))
+	opts := []oauth2.AuthCodeOption{}
+	if pkceVerifier != "" {
+		opts = append(opts, oauth2.VerifierOption(pkceVerifier))
 	}
 
-	token, err := oauth2Config.Exchange(ctx, code, tokenOpts...)
+	token, err := oauth2Config.Exchange(ctx, code, opts...)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Failed to exchange token: %v", err)
 		return
