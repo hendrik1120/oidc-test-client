@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OIDC Test Client</title>
+    <title>{{ .title }}</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -99,32 +99,32 @@
     <form action="/start" method="POST">
         <div class="form-group">
             <label for="client_id">Client ID</label>
-            <input type="text" id="client_id" name="client_id" placeholder="Enter your Client ID" required>
+            <input type="text" id="client_id" name="client_id" placeholder="Enter your Client ID" value="{{ .req.ClientID }}" required>
         </div>
 
         <div class="form-group">
             <label for="client_secret">Client Secret</label>
-            <input type="text" id="client_secret" name="client_secret" placeholder="Enter your Client Secret" required>
+            <input type="text" id="client_secret" name="client_secret" placeholder="Enter your Client Secret" value="{{ .req.ClientSecret }}" required>
         </div>
 
         <div class="form-group">
             <label for="issuer">Issuer URL</label>
-            <input type="url" id="issuer" name="issuer" placeholder="https://example.com" required>
+            <input type="url" id="issuer" name="issuer" placeholder="https://auth.example.com" value="{{ .req.Issuer }}" required>
         </div>
 
         <div class="form-group">
             <label for="redirect_uri">Redirect URI</label>
-            <input type="url" id="redirect_uri" name="redirect_uri" placeholder="http://localhost:8080/callback" value="http://localhost:8080/callback" required>
+            <input type="url" id="redirect_uri" name="redirect_uri" placeholder="http://localhost:8080/callback" value="{{ .req.RedirectURI }}" required>
         </div>
 
         <div class="form-group">
             <label for="scopes">Scopes</label>
-            <input type="text" id="scopes" name="scopes" placeholder="openid email profile" value="openid email profile" required>
-            <div class="description">Comma-separated scopes to request (e.g., openid, email, profile).</div>
+            <input type="text" id="scopes" name="scopes" placeholder="openid email profile" value="{{ .req.Scopes }}" required>
+            <div class="description">Space-separated scopes to request (e.g., openid email profile).</div>
         </div>
 
         <div class="form-group checkbox-group">
-            <input type="checkbox" id="pkce" name="pkce" value="true">
+            <input type="checkbox" id="pkce" name="pkce" value="true" {{ if eq .req.PKCE "true" }}checked{{ end }}>
             <label for="pkce">Enable PKCE</label>
         </div>
 

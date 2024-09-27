@@ -11,6 +11,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// generateRandomString generates a random string of a specified length.
 func generateRandomString(length int) (string, error) {
 	b := make([]byte, length)
 	if _, err := rand.Read(b); err != nil {
@@ -26,6 +27,19 @@ var (
 	pkceVerifier string
 )
 
+var req = struct {
+	ClientID     string `form:"client_id"`
+	ClientSecret string `form:"client_secret"`
+	Issuer       string `form:"issuer"`
+	RedirectURI  string `form:"redirect_uri"`
+	Scopes       string `form:"scopes"`
+	PKCE         string `form:"pkce"`
+}{
+	Issuer:      "https://auth.example.com",
+	RedirectURI: "http://localhost:8080/callback",
+	Scopes:      "openid email profile",
+}
+
 func main() {
 	router := gin.Default()
 
@@ -34,8 +48,9 @@ func main() {
 
 	// Landing page
 	router.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "index.html", gin.H{
+		c.HTML(http.StatusOK, "index.tmpl", gin.H{
 			"title": "OIDC Test Client",
+			"req":   req,
 		})
 	})
 
@@ -50,15 +65,6 @@ func main() {
 }
 
 func startOIDCFlow(c *gin.Context) {
-	var req struct {
-		ClientID     string `form:"client_id"`
-		ClientSecret string `form:"client_secret"`
-		Issuer       string `form:"issuer"`
-		RedirectURI  string `form:"redirect_uri"`
-		Scopes       string `form:"scopes"`
-		PKCE         string `form:"pkce"`
-	}
-
 	if err := c.ShouldBind(&req); err != nil {
 		c.String(http.StatusBadRequest, "Invalid request")
 		return
@@ -94,6 +100,8 @@ func startOIDCFlow(c *gin.Context) {
 	if req.PKCE == "true" {
 		pkceVerifier = oauth2.GenerateVerifier()
 		opts = append(opts, oauth2.S256ChallengeOption(pkceVerifier))
+	} else {
+		pkceVerifier = ""
 	}
 
 	authCodeURL := oauth2Config.AuthCodeURL(state, opts...)
@@ -129,7 +137,7 @@ func handleOIDCCallback(c *gin.Context) {
 		}
 
 		// Render the error template
-		c.HTML(http.StatusBadRequest, "error.html", data)
+		c.HTML(http.StatusBadRequest, "error.tmpl", data)
 		return
 	}
 
@@ -170,7 +178,7 @@ func handleOIDCCallback(c *gin.Context) {
 	}
 
 	// Render the HTML template with the tokens and claims
-	c.HTML(http.StatusOK, "callback.html", gin.H{
+	c.HTML(http.StatusOK, "callback.tmpl", gin.H{
 		"AccessToken": token.AccessToken,
 		"IDToken":     rawIDToken,
 		"Claims":      claims,
