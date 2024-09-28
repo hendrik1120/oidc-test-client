@@ -8,11 +8,13 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o oidc-test-client .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$BUILDPLATFORM go build -o oidc-test-client .
 
 FROM alpine:latest  
 
 WORKDIR /app
+
+COPY templates/ ./templates/
 
 COPY --from=builder /app/oidc-test-client .
 
