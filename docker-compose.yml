@@ -1,0 +1,5 @@
+services:
+  oidc-test:
+    image: ghcr.io/hendrik1120/oidc-test-client:latest
+    ports:
+      - '8080:8080'
