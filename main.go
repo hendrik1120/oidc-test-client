@@ -9,6 +9,7 @@ import (
 	"golang.org/x/oauth2"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 // Generates a random string of a specified length.
@@ -124,6 +125,7 @@ func startOIDCFlow(c *gin.Context) {
 }
 
 func handleOIDCCallback(c *gin.Context) {
+	// Check provider and client state matches
 	returnedState := c.Query("state")
 	stateCookie, err := c.Cookie("oidc_state")
 	if err != nil || returnedState != stateCookie {
@@ -131,6 +133,7 @@ func handleOIDCCallback(c *gin.Context) {
 		return
 	}
 
+	// Display errors from provider
 	erro := c.Query("error")
 	if erro != "" {
 		errorDescription := c.Query("error_description")
@@ -152,12 +155,14 @@ func handleOIDCCallback(c *gin.Context) {
 		return
 	}
 
+	// Check if the response include an authz code
 	code := c.Query("code")
 	if code == "" {
 		c.String(http.StatusBadRequest, "Authorization code not found")
 		return
 	}
 
+	// Include pkce verifier in exchange
 	pkceVerifier, err := c.Cookie("oidc_pkce")
 	ctx := context.Background()
 	opts := []oauth2.AuthCodeOption{}
@@ -165,28 +170,45 @@ func handleOIDCCallback(c *gin.Context) {
 		opts = append(opts, oauth2.VerifierOption(pkceVerifier))
 	}
 
+	// Exchange authz code for ID Token
 	token, err := oauth2Config.Exchange(ctx, code, opts...)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Failed to exchange token: %v", err)
 		return
 	}
 
+	// Extract raw token
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok {
 		c.String(http.StatusInternalServerError, "No ID token found")
 		return
 	}
 
+	// Verify raw token
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Failed to verify ID token: %v", err)
 		return
 	}
 
+	// Parse claims
 	var claims map[string]interface{}
 	if err := idToken.Claims(&claims); err != nil {
 		c.String(http.StatusInternalServerError, "Failed to parse claims: %v", err)
 		return
+	}
+
+	// Replace timestamps with formatted date time objects
+	if authTime, ok := claims["auth_time"].(float64); ok {
+		claims["auth_time"] = time.Unix(int64(authTime), 0).Format(time.RFC1123)
+	}
+
+	if exp, ok := claims["exp"].(float64); ok {
+		claims["exp"] = time.Unix(int64(exp), 0).Format(time.RFC1123)
+	}
+
+	if iat, ok := claims["iat"].(float64); ok {
+		claims["iat"] = time.Unix(int64(iat), 0).Format(time.RFC1123)
 	}
 
 	// Render the HTML template with the tokens and claims
