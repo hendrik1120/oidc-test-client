@@ -42,10 +42,6 @@
             box-sizing: border-box;
         }
 
-        input[type="checkbox"] {
-            margin-right: 5px;
-        }
-
         input[type="submit"] {
             background-color: #007bff;
             color: white;
@@ -62,16 +58,6 @@
 
         .form-group {
             margin-bottom: 12px;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-        }
-
-        .checkbox-group label {
-            font-weight: normal;
-            margin-left: 5px;
         }
 
         .description {
@@ -121,11 +107,6 @@
             <label for="scopes">Scopes</label>
             <input type="text" id="scopes" name="scopes" placeholder="openid email profile" value="{{ .req.Scopes }}" required>
             <div class="description">Space-separated scopes to request (e.g., openid email profile).</div>
-        </div>
-
-        <div class="form-group checkbox-group">
-            <input type="checkbox" id="pkce" name="pkce" value="true" {{ if eq .req.PKCE "true" }}checked{{ end }}>
-            <label for="pkce">Enable PKCE</label>
         </div>
 
         <input type="submit" value="Start OIDC Flow">

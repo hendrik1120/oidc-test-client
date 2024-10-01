@@ -4,14 +4,14 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"net/http"
-
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/oauth2"
+	"net/http"
+	"net/url"
 )
 
-// generateRandomString generates a random string of a specified length.
+// Generates a random string of a specified length.
 func generateRandomString(length int) (string, error) {
 	b := make([]byte, length)
 	if _, err := rand.Read(b); err != nil {
@@ -20,11 +20,21 @@ func generateRandomString(length int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+// Extracts the domain from a given URL string
+func extractDomain(inputURL string) (string, error) {
+	// Parse the URL
+	parsedURL, err := url.Parse(inputURL)
+	if err != nil {
+		return "", err
+	}
+	// Return the host (domain) part of the URL
+	return parsedURL.Hostname(), nil
+}
+
 var (
 	oidcConfig   *oidc.Config
 	oauth2Config oauth2.Config
 	verifier     *oidc.IDTokenVerifier
-	pkceVerifier string
 )
 
 var req = struct {
@@ -33,7 +43,6 @@ var req = struct {
 	Issuer       string `form:"issuer"`
 	RedirectURI  string `form:"redirect_uri"`
 	Scopes       string `form:"scopes"`
-	PKCE         string `form:"pkce"`
 }{
 	Issuer:      "https://auth.example.com",
 	RedirectURI: "http://localhost:8080/callback",
@@ -64,12 +73,18 @@ func main() {
 	router.Run(":8080")
 }
 
+// OIDC + OAUTH2 flow
 func startOIDCFlow(c *gin.Context) {
+	// Read template
 	if err := c.ShouldBind(&req); err != nil {
 		c.String(http.StatusBadRequest, "Invalid request")
 		return
 	}
 
+	// extract the domain from the callback url to store cookies
+	domain, _ := extractDomain(req.RedirectURI)
+
+	// Query OIDC discovery endpoint
 	ctx := context.Background()
 	provider, err := oidc.NewProvider(ctx, req.Issuer)
 	if err != nil {
@@ -77,6 +92,7 @@ func startOIDCFlow(c *gin.Context) {
 		return
 	}
 
+	// Generate JWT verifier and configure OAUTH2 from discovery endpoint
 	oidcConfig = &oidc.Config{ClientID: req.ClientID}
 	verifier = provider.Verifier(oidcConfig)
 
@@ -88,24 +104,22 @@ func startOIDCFlow(c *gin.Context) {
 		Scopes:       []string{oidc.ScopeOpenID, req.Scopes},
 	}
 
+	// Generate and set state cookie
 	state, err := generateRandomString(16)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Failed to generate state")
 		return
 	}
+	c.SetCookie("oidc_state", state, 300, "/", domain, false, true)
 
-	c.SetCookie("oidc_state", state, 3600, "/", "localhost", false, true)
-
+	// Always include PKCE challenge
 	opts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline}
-	if req.PKCE == "true" {
-		pkceVerifier = oauth2.GenerateVerifier()
-		opts = append(opts, oauth2.S256ChallengeOption(pkceVerifier))
-	} else {
-		pkceVerifier = ""
-	}
+	pkceVerifier := oauth2.GenerateVerifier()
+	opts = append(opts, oauth2.S256ChallengeOption(pkceVerifier))
+	c.SetCookie("oidc_pkce", pkceVerifier, 300, "/", domain, false, true)
 
+	// Generate auth url and redirect
 	authCodeURL := oauth2Config.AuthCodeURL(state, opts...)
-
 	c.Redirect(http.StatusFound, authCodeURL)
 }
 
@@ -119,13 +133,11 @@ func handleOIDCCallback(c *gin.Context) {
 
 	erro := c.Query("error")
 	if erro != "" {
-		// If there's an error, display a user-friendly error message
 		errorDescription := c.Query("error_description")
 		if errorDescription == "" {
 			errorDescription = "An unknown error occurred."
 		}
 
-		// Prepare data for the error template
 		type ErrorPageData struct {
 			Error       string
 			Description string
@@ -136,7 +148,6 @@ func handleOIDCCallback(c *gin.Context) {
 			Description: errorDescription,
 		}
 
-		// Render the error template
 		c.HTML(http.StatusBadRequest, "error.tmpl", data)
 		return
 	}
@@ -147,6 +158,7 @@ func handleOIDCCallback(c *gin.Context) {
 		return
 	}
 
+	pkceVerifier, err := c.Cookie("oidc_pkce")
 	ctx := context.Background()
 	opts := []oauth2.AuthCodeOption{}
 	if pkceVerifier != "" {
