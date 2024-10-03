@@ -36,6 +36,7 @@ var (
 	oidcConfig   *oidc.Config
 	oauth2Config oauth2.Config
 	verifier     *oidc.IDTokenVerifier
+	authCodeURL  string
 )
 
 var req = struct {
@@ -83,7 +84,11 @@ func startOIDCFlow(c *gin.Context) {
 	}
 
 	// extract the domain from the callback url to store cookies
-	domain, _ := extractDomain(req.RedirectURI)
+	domain, err := extractDomain(req.RedirectURI)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Failed to extract domain from callback: %v", err)
+		return
+	}
 
 	// Query OIDC discovery endpoint
 	ctx := context.Background()
@@ -102,7 +107,7 @@ func startOIDCFlow(c *gin.Context) {
 		ClientSecret: req.ClientSecret,
 		Endpoint:     provider.Endpoint(),
 		RedirectURL:  req.RedirectURI,
-		Scopes:       []string{oidc.ScopeOpenID, req.Scopes},
+		Scopes:       []string{req.Scopes},
 	}
 
 	// Generate and set state cookie
@@ -120,7 +125,7 @@ func startOIDCFlow(c *gin.Context) {
 	c.SetCookie("oidc_pkce", pkceVerifier, 300, "/", domain, false, true)
 
 	// Generate auth url and redirect
-	authCodeURL := oauth2Config.AuthCodeURL(state, opts...)
+	authCodeURL = oauth2Config.AuthCodeURL(state, opts...)
 	c.Redirect(http.StatusFound, authCodeURL)
 }
 
@@ -213,6 +218,7 @@ func handleOIDCCallback(c *gin.Context) {
 
 	// Render the HTML template with the tokens and claims
 	c.HTML(http.StatusOK, "callback.tmpl", gin.H{
+		"authCodeURL": authCodeURL,
 		"AccessToken": token.AccessToken,
 		"IDToken":     rawIDToken,
 		"Claims":      claims,
