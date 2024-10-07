@@ -32,10 +32,19 @@ func extractDomain(inputURL string) (string, error) {
 	return parsedURL.Hostname(), nil
 }
 
+// Formats specified claims to RFC1123 format
+func formatTimestampClaims(tokenClaims map[string]interface{}, claimKeys ...string) {
+	for _, claimKey := range claimKeys {
+		if timestamp, ok := tokenClaims[claimKey].(float64); ok {
+			tokenClaims[claimKey] = time.Unix(int64(timestamp), 0).Format(time.RFC1123)
+		}
+	}
+}
+
 var (
-	oidcConfig   *oidc.Config
 	oauth2Config oauth2.Config
-	verifier     *oidc.IDTokenVerifier
+	oidcProvider *oidc.Provider
+	jwtVerifier  *oidc.IDTokenVerifier
 	authCodeURL  string
 )
 
@@ -92,22 +101,34 @@ func startOIDCFlow(c *gin.Context) {
 
 	// Query OIDC discovery endpoint
 	ctx := context.Background()
-	provider, err := oidc.NewProvider(ctx, req.Issuer)
+	oidcProvider, err = oidc.NewProvider(ctx, req.Issuer)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Failed to fetch OIDC provider: %v", err)
 		return
 	}
 
-	// Generate JWT verifier and configure OAUTH2 from discovery endpoint
-	oidcConfig = &oidc.Config{ClientID: req.ClientID}
-	verifier = provider.Verifier(oidcConfig)
+	// Get endpoints and generate JWT verifier
+	oidcConfig := &oidc.Config{ClientID: req.ClientID}
+	endpoint := oidcProvider.Endpoint()
+	jwtVerifier = oidcProvider.Verifier(oidcConfig)
 
+	// Configuring oauth2 with the endpoints available from the oidc lib. Using authelia defaults for the rest.
 	oauth2Config = oauth2.Config{
 		ClientID:     req.ClientID,
 		ClientSecret: req.ClientSecret,
-		Endpoint:     provider.Endpoint(),
-		RedirectURL:  req.RedirectURI,
-		Scopes:       []string{req.Scopes},
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  endpoint.AuthURL,
+			TokenURL: endpoint.TokenURL,
+			//PushedAuthURL:    domain + "/api/oidc/pushed-authorization-request",
+			//IntrospectionURL: domain + "/api/oidc/introspection",
+			//RevocationURL:    domain + "/api/oidc/revocation",
+			//UserinfoURL:      domain + "/api/oidc/userinfo",
+			//JWKSURL:          domain + "/jwks.json",
+			DeviceAuthURL: endpoint.DeviceAuthURL,
+			AuthStyle:     oauth2.AuthStyleInParams,
+		},
+		RedirectURL: req.RedirectURI,
+		Scopes:      []string{req.Scopes},
 	}
 
 	// Generate and set state cookie
@@ -130,14 +151,6 @@ func startOIDCFlow(c *gin.Context) {
 }
 
 func handleOIDCCallback(c *gin.Context) {
-	// Check provider and client state matches
-	returnedState := c.Query("state")
-	stateCookie, err := c.Cookie("oidc_state")
-	if err != nil || returnedState != stateCookie {
-		c.String(http.StatusBadRequest, "Invalid state")
-		return
-	}
-
 	// Display errors from provider
 	erro := c.Query("error")
 	if erro != "" {
@@ -160,7 +173,24 @@ func handleOIDCCallback(c *gin.Context) {
 		return
 	}
 
-	// Check if the response include an authz code
+	var (
+		token        *oauth2.Token
+		idToken      *oidc.IDToken
+		pkceVerifier string
+		err          error
+		idTokenRaw   string
+		ok           bool
+	)
+
+	// Check provider and client state matches
+	returnedState := c.Query("state")
+	stateCookie, err := c.Cookie("oidc_state")
+	if err != nil || returnedState != stateCookie {
+		c.String(http.StatusBadRequest, "Invalid state")
+		return
+	}
+
+	// Check if the response includes an authz code
 	code := c.Query("code")
 	if code == "" {
 		c.String(http.StatusBadRequest, "Authorization code not found")
@@ -168,59 +198,57 @@ func handleOIDCCallback(c *gin.Context) {
 	}
 
 	// Include pkce verifier in exchange
-	pkceVerifier, err := c.Cookie("oidc_pkce")
-	ctx := context.Background()
-	opts := []oauth2.AuthCodeOption{}
-	if pkceVerifier != "" {
-		opts = append(opts, oauth2.VerifierOption(pkceVerifier))
+	if pkceVerifier, err = c.Cookie("oidc_pkce"); err != nil {
+		c.String(http.StatusBadRequest, "Failed to get PKCE cookie.")
 	}
 
 	// Exchange authz code for ID Token
-	token, err := oauth2Config.Exchange(ctx, code, opts...)
-	if err != nil {
+	if token, err = oauth2Config.Exchange(c, code, oauth2.VerifierOption(pkceVerifier)); err != nil {
 		c.String(http.StatusInternalServerError, "Failed to exchange token: %v", err)
 		return
 	}
 
 	// Extract raw token
-	rawIDToken, ok := token.Extra("id_token").(string)
-	if !ok {
+	if idTokenRaw, ok = token.Extra("id_token").(string); !ok {
 		c.String(http.StatusInternalServerError, "No ID token found")
 		return
 	}
 
 	// Verify raw token
-	idToken, err := verifier.Verify(ctx, rawIDToken)
-	if err != nil {
+	if idToken, err = jwtVerifier.Verify(c, idTokenRaw); err != nil {
 		c.String(http.StatusInternalServerError, "Failed to verify ID token: %v", err)
 		return
 	}
 
-	// Parse claims
-	var claims map[string]interface{}
-	if err := idToken.Claims(&claims); err != nil {
-		c.String(http.StatusInternalServerError, "Failed to parse claims: %v", err)
+	// Parse token claims
+	var tokenClaims map[string]interface{}
+	if err = idToken.Claims(&tokenClaims); err != nil {
+		c.String(http.StatusInternalServerError, "Failed to parse tokenClaims: %v", err)
+		return
+	}
+
+	var userinfo *oidc.UserInfo
+	if userinfo, err = oidcProvider.UserInfo(c, oauth2.StaticTokenSource(token)); err != nil {
+		c.String(http.StatusInternalServerError, "Failed to retrieve userinfo claims: %v", err)
+		return
+	}
+
+	var userinfoClaims map[string]interface{}
+	if err = userinfo.Claims(&userinfoClaims); err != nil {
+		c.String(http.StatusInternalServerError, "Unable to decode userinfo claims: %v", err)
 		return
 	}
 
 	// Replace timestamps with formatted date time objects
-	if authTime, ok := claims["auth_time"].(float64); ok {
-		claims["auth_time"] = time.Unix(int64(authTime), 0).Format(time.RFC1123)
-	}
+	formatTimestampClaims(tokenClaims, "auth_time", "exp", "iat")
+	formatTimestampClaims(userinfoClaims, "auth_time", "exp", "iat")
 
-	if exp, ok := claims["exp"].(float64); ok {
-		claims["exp"] = time.Unix(int64(exp), 0).Format(time.RFC1123)
-	}
-
-	if iat, ok := claims["iat"].(float64); ok {
-		claims["iat"] = time.Unix(int64(iat), 0).Format(time.RFC1123)
-	}
-
-	// Render the HTML template with the tokens and claims
+	// Render the HTML template with the tokens and tokenClaims
 	c.HTML(http.StatusOK, "callback.tmpl", gin.H{
-		"authCodeURL": authCodeURL,
-		"AccessToken": token.AccessToken,
-		"IDToken":     rawIDToken,
-		"Claims":      claims,
+		"authCodeURL":    authCodeURL,
+		"AccessToken":    token.AccessToken,
+		"IDToken":        idTokenRaw,
+		"tokenClaims":    tokenClaims,
+		"userinfoClaims": userinfoClaims,
 	})
 }

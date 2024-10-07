@@ -52,23 +52,26 @@
 </div>
 
 <div class="token-container">
-  <h2>Claims</h2>
+  <h2>Combined Claims (Token Claims vs. Userinfo)</h2>
   <table>
     <thead>
     <tr>
       <th>Claim</th>
-      <th>Value</th>
+      <th>Token Value</th>
+      <th>Userinfo Value</th>
     </tr>
     </thead>
     <tbody>
-    {{ range $key, $value := .Claims }}
+    {{ range $key, $value := .tokenClaims }}
     <tr>
       <td>{{ $key }}</td>
       <td>{{ $value }}</td>
+      <td>{{ index $.userinfoClaims $key }}</td>
     </tr>
     {{ end }}
     </tbody>
   </table>
 </div>
+
 </body>
 </html>
