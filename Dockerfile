@@ -10,7 +10,9 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=$BUILDPLATFORM go build -o oidc-test-client .
 
-FROM alpine:latest  
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates tzdata bash
 
 WORKDIR /app
 
