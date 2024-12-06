@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/oauth2"
@@ -54,10 +56,12 @@ var req = struct {
 	Issuer       string `form:"issuer"`
 	RedirectURI  string `form:"redirect_uri"`
 	Scopes       string `form:"scopes"`
+	Claims       string `form:"claims"`
 }{
 	Issuer:      "https://auth.example.com",
 	RedirectURI: "http://localhost:8080/callback",
 	Scopes:      "openid email profile",
+	//Claims:      `{"id_token":{"email":null,"email_verified":null},"userinfo":{"preferred_username":null}}`,
 }
 
 func main() {
@@ -88,8 +92,25 @@ func main() {
 func startOIDCFlow(c *gin.Context) {
 	// Read template
 	if err := c.ShouldBind(&req); err != nil {
-		c.String(http.StatusBadRequest, "Invalid request")
+		c.String(http.StatusInternalServerError, "Invalid request: %v", err)
 		return
+	}
+
+	// Validate and process the Claims JSON
+	var compactedClaims string
+	if req.Claims != "" {
+		var claimsJSON map[string]interface{}
+		if err := json.Unmarshal([]byte(req.Claims), &claimsJSON); err != nil {
+			c.String(http.StatusInternalServerError, "Invalid JSON in claims: %v", err)
+			return
+		}
+		// Compact the JSON before adding it to the URL
+		var buffer bytes.Buffer
+		if err := json.Compact(&buffer, []byte(req.Claims)); err != nil {
+			c.String(http.StatusInternalServerError, "Failed to compact JSON: %v", err)
+			return
+		}
+		compactedClaims = buffer.String()
 	}
 
 	// extract the domain from the callback url to store cookies
@@ -134,7 +155,7 @@ func startOIDCFlow(c *gin.Context) {
 	// Generate and set state cookie
 	state, err := generateRandomString(16)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "Failed to generate state")
+		c.String(http.StatusInternalServerError, "Failed to generate state: %v", err)
 		return
 	}
 	c.SetCookie("oidc_state", state, 300, "/", domain, false, true)
@@ -142,7 +163,7 @@ func startOIDCFlow(c *gin.Context) {
 	// Always include PKCE challenge
 	opts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline}
 	pkceVerifier := oauth2.GenerateVerifier()
-	opts = append(opts, oauth2.S256ChallengeOption(pkceVerifier))
+	opts = append(opts, oauth2.S256ChallengeOption(pkceVerifier), oauth2.SetAuthURLParam("claims", compactedClaims))
 	c.SetCookie("oidc_pkce", pkceVerifier, 300, "/", domain, false, true)
 
 	// Generate auth url and redirect

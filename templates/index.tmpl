@@ -32,7 +32,7 @@
             font-weight: bold;
         }
 
-        input[type="text"], input[type="url"], input[type="submit"] {
+        input[type="text"], input[type="url"], textarea, input[type="submit"] {
             width: 100%;
             padding: 8px;
             margin-bottom: 10px;
@@ -40,6 +40,11 @@
             border-radius: 4px;
             font-size: 14px;
             box-sizing: border-box;
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
         }
 
         input[type="submit"] {
@@ -71,7 +76,7 @@
                 padding: 15px;
             }
 
-            input[type="text"], input[type="url"], input[type="submit"] {
+            input[type="text"], input[type="url"], textarea, input[type="submit"] {
                 font-size: 14px;
             }
         }
@@ -107,6 +112,12 @@
             <label for="scopes">Scopes</label>
             <input type="text" id="scopes" name="scopes" placeholder="openid email profile" value="{{ .req.Scopes }}">
             <div class="description">Space-separated scopes to request (e.g., openid email profile).</div>
+        </div>
+
+        <div class="form-group">
+            <label for="claims">Claims</label>
+            <textarea id="claims" name="claims" placeholder="Enter claims in JSON format here">{{ .req.Claims }}</textarea>
+            <div class="description">Enter claims in JSON format (e.g., {"id_token":{"email":null},"userinfo":{"preferred_username":null}}).</div>
         </div>
 
         <input type="submit" value="Start OIDC Flow">
