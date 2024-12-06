@@ -241,7 +241,7 @@ func handleOIDCCallback(c *gin.Context) {
 
 	// Replace timestamps with formatted date time objects
 	formatTimestampClaims(tokenClaims, "auth_time", "exp", "iat")
-	formatTimestampClaims(userinfoClaims, "auth_time", "exp", "iat")
+	formatTimestampClaims(userinfoClaims, "auth_time", "exp", "iat", "updated_at")
 
 	allClaims := make(map[string]struct{})
 	for k := range tokenClaims {
