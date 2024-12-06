@@ -61,6 +61,7 @@ var req = struct {
 	Issuer:      "https://auth.example.com",
 	RedirectURI: "http://localhost:8080/callback",
 	Scopes:      "openid email profile",
+	//Claims:      `{"id_token":{"email":null,"email_verified":null},"userinfo":{"preferred_username":null}}`,
 }
 
 func main() {
@@ -273,9 +274,11 @@ func handleOIDCCallback(c *gin.Context) {
 
 	// Render the HTML template with the tokens and tokenClaims
 	c.HTML(http.StatusOK, "callback.tmpl", gin.H{
-		"authCodeURL": authCodeURL,
-		"AccessToken": token.AccessToken,
-		"IDToken":     idTokenRaw,
-		"allClaims":   allClaims,
+		"authCodeURL":    authCodeURL,
+		"AccessToken":    token.AccessToken,
+		"IDToken":        idTokenRaw,
+		"tokenClaims":    tokenClaims,
+		"userinfoClaims": userinfoClaims,
+		"allClaims":      allClaims,
 	})
 }
