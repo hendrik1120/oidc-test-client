@@ -243,6 +243,14 @@ func handleOIDCCallback(c *gin.Context) {
 	formatTimestampClaims(tokenClaims, "auth_time", "exp", "iat")
 	formatTimestampClaims(userinfoClaims, "auth_time", "exp", "iat")
 
+	allClaims := make(map[string]struct{})
+	for k := range tokenClaims {
+		allClaims[k] = struct{}{}
+	}
+	for k := range userinfoClaims {
+		allClaims[k] = struct{}{}
+	}
+
 	// Render the HTML template with the tokens and tokenClaims
 	c.HTML(http.StatusOK, "callback.tmpl", gin.H{
 		"authCodeURL":    authCodeURL,
@@ -250,5 +258,6 @@ func handleOIDCCallback(c *gin.Context) {
 		"IDToken":        idTokenRaw,
 		"tokenClaims":    tokenClaims,
 		"userinfoClaims": userinfoClaims,
+		"allClaims":      allClaims,
 	})
 }
